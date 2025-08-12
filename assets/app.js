@@ -3,60 +3,66 @@ const TIMER_SECONDS = 10;        // waktu tunggu awal untuk enable claim
 const COOLDOWN_SECONDS = 10;     // cooldown setelah claim
 
 // Elemen DOM
-const elTimer   = document.querySelector('#timer');
-const elClaim   = document.querySelector('#claim');
-const elMsg     = document.querySelector('#msg');
-const elNext    = document.querySelector('#next-claim');
-const elProgress= document.querySelector('#progress');
+const elTimer    = document.querySelector('#timer');
+const elTimer2   = document.querySelector('#timer2'); // opsional (biar sinkron)
+const elClaim    = document.querySelector('#claim');
+const elMsg      = document.querySelector('#msg');
+const elNext     = document.querySelector('#next-claim');
+const elProgress = document.querySelector('#progress');
 
-let sec = TIMER_SECONDS;
-let ticking = false;
-
-// --- helper render progress bar (0% -> 100%) ---
-function renderProgress() {
-  if (!elProgress || !Number.isFinite(sec)) return;
-  // ketika menunggu, bar jalan dari 0 -> 100
-  let base = (ticking ? TIMER_SECONDS : COOLDOWN_SECONDS);
-  // fallback bila base 0/undefined
-  if (!base || base <= 0) base = 1;
-  const pct = Math.max(0, Math.min(100, 100 - Math.floor((sec / base) * 100)));
-  elProgress.style.width = pct + '%';
-}
-
-function maybeEnable(){
-  const token   = localStorage.getItem('hcaptcha');
-  const address = document.getElementById('address')?.value.trim() || '';
-  // tombol enable hanya saat timer 0 dan syarat terisi
-  elClaim.disabled = !(sec === 0 && token && address.length >= 3);
-}
-
-function tick(){
-  ticking = true;
-  elTimer.textContent = sec;
-  renderProgress();
-  if (sec === 0) {
-    maybeEnable();
-    return;
-  }
-  sec -= 1;
-  setTimeout(tick, 1000);
-}
-
-// listen isian input dan captcha
-document.addEventListener('captcha-ready', maybeEnable);
-['address','coin'].forEach(id=>{
-  const el = document.getElementById(id);
-  if (el) el.addEventListener('input', maybeEnable);
-});
-
-// --- Supabase endpoint (sudah jalan di versi kamu) ---
+// ===== Supabase endpoint (punya kamu) =====
 const SUPABASE_URL  = 'https://jjhlpaonnnacucjcgmrc.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpqaGxwYW9ubm5hY3VjamNnbXJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUwMDIzODYsImV4cCI6MjA3MDU3ODM4Nn0.03N9XzY7HNYxHbVs1ac0elb27Tg8gPlMYycSFHTZHhk';
 
+let sec = TIMER_SECONDS;
+let mode = 'enable'; // 'enable' (menunggu sebelum bisa claim) atau 'cooldown'
+
+// --- render semua tampilan timer/progress ---
+function paint() {
+  if (elTimer)  elTimer.textContent  = sec;
+  if (elTimer2) elTimer2.textContent = sec;
+  if (elProgress) {
+    const base = mode === 'enable' ? TIMER_SECONDS : COOLDOWN_SECONDS;
+    const pct = 100 - Math.floor((sec / base) * 100);
+    elProgress.style.width = Math.max(0, Math.min(100, pct)) + '%';
+  }
+}
+
+// aktifkan tombol jika syarat terpenuhi
+function maybeEnable(){
+  const token   = localStorage.getItem('hcaptcha');
+  const address = document.getElementById('address')?.value.trim() || '';
+  const ready   = (mode === 'enable' && sec === 0 && token && address.length >= 3);
+  if (elClaim) elClaim.disabled = !ready;
+}
+
+// loop timer 1 detik
+function startLoop() {
+  paint(); maybeEnable();
+  const tick = () => {
+    if (sec > 0) {
+      sec -= 1;
+      paint(); maybeEnable();
+      setTimeout(tick, 1000);
+    } else {
+      // saat habis:
+      paint(); maybeEnable();
+    }
+  };
+  setTimeout(tick, 1000);
+}
+
+// dengarkan captcha & input
+document.addEventListener('captcha-ready', maybeEnable);
+['address','coin'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('input', maybeEnable);
+});
+
+// Submit klaim
 async function submitClaim(){
-  // cegah double click
+  if (!elClaim) return;
   elClaim.disabled = true;
-  elMsg.textContent = 'Submitting…';
+  if (elMsg) elMsg.textContent = 'Submitting…';
 
   const address = document.getElementById('address')?.value.trim() || '';
   const coin    = document.getElementById('coin')?.value || 'BTC';
@@ -74,49 +80,49 @@ async function submitClaim(){
     });
 
     if (!res.ok) {
-      elMsg.textContent = 'Failed to submit.';
+      if (elMsg) elMsg.textContent = 'Failed to submit.';
+      elClaim.disabled = false;
       return;
     }
 
-    // set next claim time
+    // set "Next claim"
     const now = new Date();
     now.setSeconds(now.getSeconds() + COOLDOWN_SECONDS);
-    elNext.textContent = now.toLocaleTimeString();
-    elMsg.textContent  = 'Success! Your claim is queued.';
+    if (elNext) elNext.textContent = now.toLocaleTimeString();
+    if (elMsg)  elMsg.textContent  = 'Success! Your claim is queued.';
 
-    // reset timer untuk cooldown
-    ticking = false;
-    sec = COOLDOWN_SECONDS;
-    elTimer.textContent = sec;
-    renderProgress();
+    // masuk mode cooldown: hitung mundur 10 detik lalu balik lagi ke enable
+    mode = 'cooldown';
+    sec  = COOLDOWN_SECONDS;
+    paint();
 
-    // jalankan ulang tick sampai 0, lalu enable lagi
-    const loop = () => {
-      if (sec === 0) {
-        maybeEnable();
-        // setelah cooldown selesai, mulai lagi timer “enable” 10s agar UX konsisten
-        sec = TIMER_SECONDS;
-        ticking = true;
-        renderProgress();
-        setTimeout(tick, 1000);
-        return;
+    const cooldownTick = () => {
+      if (sec > 0) {
+        sec -= 1;
+        paint();
+        setTimeout(cooldownTick, 1000);
+      } else {
+        // selesai cooldown → mulai lagi fase enable
+        mode = 'enable';
+        sec  = TIMER_SECONDS;
+        paint(); maybeEnable();
+        startLoop();
       }
-      sec -= 1;
-      elTimer.textContent = sec;
-      renderProgress();
-      setTimeout(loop, 1000);
     };
-    setTimeout(loop, 1000);
+    setTimeout(cooldownTick, 1000);
 
   } catch (e) {
-    elMsg.textContent = 'Failed to submit.';
     console.error(e);
+    if (elMsg) elMsg.textContent = 'Failed to submit.';
+    elClaim.disabled = false;
   }
 }
 
-if (elClaim) elClaim.addEventListener('click', submitClaim);
+elClaim?.addEventListener('click', submitClaim);
 
-// start
-renderProgress();
-tick();
+// start awal (fase enable)
+mode = 'enable';
+sec  = TIMER_SECONDS;
+paint();
+startLoop();
 maybeEnable();
