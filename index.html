@@ -214,19 +214,20 @@
       const t1 = document.getElementById('timer');    // big ring
       const t2 = document.getElementById('timer2');   // small card
       const prog = document.getElementById('progress');
-      // observe changes pushed by app.js
       const set = (v, pct) => {
-        t1.textContent = v;
-        t2.textContent = v;
-        if (pct!=null) {
+        if (t1) t1.textContent = v;
+        if (t2) t2.textContent = v;
+        if (prog && pct!=null) {
           prog.style.width = pct + '%';
-          t1.parentElement.parentElement.style.setProperty('--p', pct + '%');
+          // update hero ring
+          const ring = t1?.closest('.ring-grad');
+          if (ring) ring.style.setProperty('--p', pct + '%');
         }
       };
-      // tiny polling to reflect value written by app.js
+      // polling ringan agar hero ring ikut update
       let last = null, total = 10;
       setInterval(()=>{
-        const v = Number(document.getElementById('timer').textContent || 0);
+        const v = Number(document.getElementById('timer')?.textContent || 0);
         if (v !== last) {
           last = v;
           const pct = 100 - Math.round((v/total)*100);
@@ -237,6 +238,6 @@
   </script>
 
   <!-- your app logic -->
-  <script type="module" src="./assets/app.js"></script>
+  <script type="module" src="./assets/app.js?v=9"></script>
 </body>
 </html>
