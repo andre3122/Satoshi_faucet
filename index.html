@@ -134,7 +134,12 @@
 
           <!-- captcha & CTA -->
           <div class="mt-2">
-            <div class="h-captcha" data-sitekey="7f0459a4-d5a6-4714-9896-6316fb26c5ea" data-callback="onCaptcha"></div>
+            <div
+              class="h-captcha"
+              data-sitekey="7f0459a4-d5a6-4714-9896-6316fb26c5ea"
+              data-callback="onCaptcha"
+              data-expired-callback="onCaptchaExpired">
+            </div>
           </div>
           <button id="claim" class="w-full rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white py-3 transition" disabled>
             Claim
@@ -194,6 +199,23 @@
       } catch (e) { console.error(e); }
     }
 
+    // reset token + widget saat kadaluarsa / setelah klaim
+    function resetCaptcha() {
+      try {
+        localStorage.removeItem('hcaptcha');
+        if (window.hcaptcha && typeof window.hcaptcha.reset === 'function') {
+          window.hcaptcha.reset();
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    // otomatis dipanggil hCaptcha saat token expired
+    function onCaptchaExpired() {
+      resetCaptcha();
+      const claimBtn = document.getElementById('claim');
+      if (claimBtn) claimBtn.disabled = true;
+    }
+
     // theme toggle
     (function(){
       const btn = document.getElementById('toggle-theme');
@@ -219,12 +241,10 @@
         if (t2) t2.textContent = v;
         if (prog && pct!=null) {
           prog.style.width = pct + '%';
-          // update hero ring
           const ring = t1?.closest('.ring-grad');
           if (ring) ring.style.setProperty('--p', pct + '%');
         }
       };
-      // polling ringan agar hero ring ikut update
       let last = null, total = 10;
       setInterval(()=>{
         const v = Number(document.getElementById('timer')?.textContent || 0);
