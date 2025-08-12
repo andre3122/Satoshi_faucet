@@ -1,0 +1,22 @@
+name: Faucet Payout
+on:
+  schedule:
+    - cron: '*/10 * * * *' # jalan tiap 10 menit
+  workflow_dispatch: {}     # bisa run manual
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm i node-fetch@3 @supabase/supabase-js@2
+      - run: node payout.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
+          FAUCETPAY_API_KEY: ${{ secrets.FAUCETPAY_API_KEY }}
+          FAUCET_NAME: ${{ secrets.FAUCET_NAME }}
+          BASE_REWARD_SATS: ${{ secrets.BASE_REWARD_SATS }}
+          
