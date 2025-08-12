@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SatoshiFaucet by andre3122 — Claim Free Crypto</title>
+  <meta name="description" content="Claim small crypto rewards every few seconds by solving a captcha and viewing ads. Multi-coin payouts via FaucetPay." />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://unpkg.com/@fontsource/inter@5.0.12/400.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <main class="max-w-4xl mx-auto p-4">
+    <section class="grid md:grid-cols-2 gap-4">
+      <div class="space-y-4">
+        <h1 class="text-3xl font-extrabold">Claim free crypto every 10 seconds</h1>
+        <div class="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
+          <label class="block text-sm font-medium">Choose coin</label>
+          <select id="coin" class="w-full border rounded-lg p-2">
+            <option>BTC</option>
+            <option>ETH</option>
+            <option>DOGE</option>
+            <option>LTC</option>
+            <option>BCH</option>
+            <option>DASH</option>
+            <option>DGB</option>
+            <option>TRX</option>
+            <option>USDT</option>
+            <option>BNB</option>
+          </select>
+          <label class="block text-sm font-medium">FaucetPay address (or username)</label>
+          <input id="address" class="w-full border rounded-lg p-2" placeholder="Enter FaucetPay address or username" />
+          <div class="grid grid-cols-3 gap-2 text-center">
+            <div class="rounded-xl border p-3">
+              <div class="text-xs">Timer</div>
+              <div id="timer" class="font-bold text-xl">10</div>
+            </div>
+            <div class="rounded-xl border p-3">
+              <div class="text-xs">Next claim</div>
+              <div id="next-claim" class="font-bold text-xl">—</div>
+            </div>
+            <div class="rounded-xl border p-3">
+              <div class="text-xs">Referral boost</div>
+              <div id="ref-boost" class="font-bold text-xl">0%</div>
+            </div>
+          </div>
+          <div id="adslot" class="h-32 rounded-xl border bg-white flex items-center justify-center">
+            <span class="text-sm text-slate-500">Ad slot • keep visible while timer counts down</span>
+          </div>
+          <div class="h-captcha" data-sitekey="YOUR-HCAPTCHA-SITEKEY" data-callback="onCaptcha"></div>
+          <button id="claim" class="w-full rounded-xl bg-black text-white py-2 disabled:opacity-50" disabled>Claim</button>
+          <div id="msg" class="text-sm"></div>
+          <div class="text-xs text-slate-500">One claim per 10s per wallet. Abuse = ban.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+<script type="module" src="./assets/app.js"></script>
+</body>
+</html>
