@@ -1,89 +1,132 @@
-// ====== Faucet UI timers ======
-const TIMER_SECONDS = 10;
-const COOLDOWN_SECONDS = 10;
+/* ==== CONFIG ==== */
+const TIMER_SECONDS = 10;          // durasi hitung mundur
+const COOLDOWN_SECONDS = 10;       // hanya untuk tampilan "Next claim"
 
-const elTimer = document.querySelector('#timer');
-const elClaim = document.querySelector('#claim');
-const elMsg   = document.querySelector('#msg');
-const elNext  = document.querySelector('#next-claim');
+/* ==== ELEMENTS ==== */
+const $ = (sel) => document.querySelector(sel);
+const elTimer     = $("#timer");
+const elTimer2    = $("#timer2");        // kalau nggak ada, aman (opsional)
+const elProgress  = $("#progress");      // bar biru di bawah "TIMER"
+const elNext      = $("#next-claim");
+const elClaim     = $("#claim");
+const elMsg       = $("#msg");
+const elAddress   = $("#address");
+const elCoin      = $("#coin");
 
+/* ==== STATE ==== */
 let sec = TIMER_SECONDS;
+let intervalId = null;
+let captchaToken = localStorage.getItem("hcaptcha") || null;
 
-function tick() {
-  elTimer.textContent = sec;
-  if (sec === 0) {
-    maybeEnable();
-    return;
+/* ==== SUPABASE (pakai punyamu!) ==== */
+const SUPABASE_URL  = '<<YOUR_SUPABASE_URL>>';   // pakai yang sudah kamu pakai sebelumnya
+const SUPABASE_ANON = '<<YOUR_SUPABASE_ANON>>';  // pakai yang sudah kamu pakai sebelumnya
+
+/* ==== UI HELPERS ==== */
+function paint() {
+  // angka
+  if (elTimer)  elTimer.textContent  = sec;
+  if (elTimer2) elTimer2.textContent = sec;
+
+  // progress bar: 0% di awal → 100% saat habis
+  if (elProgress) {
+    const pct = ((TIMER_SECONDS - sec) / TIMER_SECONDS) * 100;
+    elProgress.style.width = `${pct}%`;
   }
-  sec -= 1;
-  setTimeout(tick, 1000);
 }
 
-// enable tombol claim saat captcha + input valid
-document.addEventListener('captcha-ready', maybeEnable);
-['address','coin'].forEach(id => {
-  const el = document.getElementById(id);
-  if (el) el.addEventListener('input', maybeEnable);
+function startTimer() {
+  clearInterval(intervalId);
+  sec = TIMER_SECONDS;
+  paint();
+
+  intervalId = setInterval(() => {
+    sec -= 1;
+    if (sec <= 0) {
+      sec = 0;
+      paint();
+      clearInterval(intervalId);
+      maybeEnable();     // tombol otomatis enable kalau syarat lain terpenuhi
+      return;
+    }
+    paint();
+  }, 1000);
+}
+
+function maybeEnable() {
+  const okAddress = (elAddress?.value.trim().length || 0) >= 3;
+  const okTime    = sec === 0;
+  const okCaptcha = !!captchaToken;
+  if (elClaim) elClaim.disabled = !(okAddress && okTime && okCaptcha);
+}
+
+/* hCaptcha callback dari HTML */
+window.onCaptcha = (token) => {
+  try {
+    captchaToken = token;
+    localStorage.setItem("hcaptcha", token);
+  } catch {}
+  maybeEnable();
+};
+
+/* ==== EVENTS ==== */
+document.addEventListener("input", (e) => {
+  if (e.target === elAddress || e.target === elCoin) {
+    maybeEnable();
+  }
 });
 
-function maybeEnable(){
-  const token   = localStorage.getItem('hcaptcha');
-  const address = document.getElementById('address').value.trim();
-  // aktif kalau: timer selesai + token ada + address minimal 3 char
-  elClaim.disabled = !(sec === 0 && token && address.length >= 3);
-}
+/* ==== SUBMIT ==== */
+async function submitClaim() {
+  if (!elClaim) return;
+  elClaim.disabled = true;
+  if (elMsg) elMsg.textContent = "Submitting…";
 
-// ====== Supabase config (punya kamu) ======
-const SUPABASE_URL  = 'https://jjhlpaonnnacucjcgmrc.supabase.co';
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpqaGxwYW9ubm5hY3VjamNnbXJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUwMDIzODYsImV4cCI6MjA3MDU3ODM4Nn0.03N9XzY7HNYxHbVs1ac0elb27Tg8gPlMYycSFHTZHhk';
-
-// ====== Submit handler ======
-async function submitClaim(){
   try {
-    elClaim.disabled = true;
-    elMsg.textContent = 'Submitting…';
+    const address = elAddress.value.trim();
+    const coin    = elCoin.value;
 
-    const address = document.getElementById('address').value.trim();
-    const coin    = document.getElementById('coin').value;
-    const token   = localStorage.getItem('hcaptcha');
-
-    const payload = { address, coin, captcha_token: token };
+    // data yang disimpan ke Supabase
+    const body = { address, coin, captcha_token: captchaToken };
 
     const res = await fetch(`${SUPABASE_URL}/rest/v1/claims`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        apikey: SUPABASE_ANON,
-        Authorization: `Bearer ${SUPABASE_ANON}`,
-        Prefer: 'return=minimal'
+        "Content-Type": "application/json",
+        "apikey": SUPABASE_ANON,
+        "Authorization": `Bearer ${SUPABASE_ANON}`,
+        "Prefer": "return=representation"
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(body),
     });
 
     if (!res.ok) {
-      elMsg.textContent = 'Failed to submit.';
-      elClaim.disabled = false;
+      const t = await res.text().catch(()=> "");
+      if (elMsg) elMsg.textContent = "Failed to submit.";
+      console.error("Supabase error:", res.status, t);
+      // timer tetap jalan; biar user bisa coba lagi setelah 0 detik + captcha
       return;
     }
 
-    // sukses → set cooldown “Next claim”, reset timer & captcha
-    const next = new Date();
-    next.setSeconds(next.getSeconds() + COOLDOWN_SECONDS);
-    elNext.textContent = next.toLocaleTimeString();
-    elMsg.textContent = 'Success! Your claim is queued.';
+    // next-claim (tampilan jam saja)
+    const now = new Date();
+    now.setSeconds(now.getSeconds() + COOLDOWN_SECONDS);
+    if (elNext) elNext.textContent = now.toLocaleTimeString();
 
-    // reset captcha token biar user verifikasi lagi untuk klaim berikutnya
-    localStorage.removeItem('hcaptcha');
-    sec = TIMER_SECONDS;
-    setTimeout(tick, 1000);
-  } catch (err) {
-    console.error(err);
-    elMsg.textContent = 'Failed to submit.';
-    elClaim.disabled = false;
+    if (elMsg) elMsg.textContent = "Success! Your claim is queued.";
+
+    // Reset siklus: mulai hitung lagi 10 detik (tanpa refresh)
+    startTimer();
+    maybeEnable();
+  } catch (e) {
+    console.error(e);
+    if (elMsg) elMsg.textContent = "Failed to submit.";
   }
 }
 
-elClaim.addEventListener('click', submitClaim);
+if (elClaim) elClaim.addEventListener("click", submitClaim);
 
-// mulai timer awal
-tick();
+/* ==== BOOT ==== */
+startTimer();
+maybeEnable();
+
