@@ -1,22 +1,41 @@
 name: Faucet Payout
+
 on:
+  # bisa dijalankan manual dari tab Actions
+  workflow_dispatch:
+
+  # jalan otomatis tiap 10 menit (waktu GitHub = UTC)
   schedule:
-    - cron: '*/10 * * * *' # jalan tiap 10 menit
-  workflow_dispatch: {}     # bisa run manual
+    - cron: "*/10 * * * *"
+
 jobs:
-  run:
+  run-payout:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
-      - run: npm i node-fetch@3 @supabase/supabase-js@2
-      - run: node payout.mjs
+          node-version: "20"
+
+      # Kalau di payout.mjs kamu pakai `import fetch from "node-fetch"`
+      # kita install dependensinya + supabase-js
+      - name: Install deps
+        run: |
+          npm init -y >/dev/null 2>&1 || true
+          npm i @supabase/supabase-js node-fetch
+
+      - name: Run payout script
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
           FAUCETPAY_API_KEY: ${{ secrets.FAUCETPAY_API_KEY }}
           FAUCET_NAME: ${{ secrets.FAUCET_NAME }}
-          BASE_REWARD_SATS: ${{ secrets.BASE_REWARD_SATS }}
-          
+          BASE_REWARD_SATS: ${{ secrets.BASE_REWARD_SATS }}   # optional
+          MAX_PER_RUN: ${{ secrets.MAX_PER_RUN }}             # optional
+          HCAPTCHA_SECRET: ${{ secrets.HCAPTCHA_SECRET }}     # optional
+        run: node payout.mjs
+        
