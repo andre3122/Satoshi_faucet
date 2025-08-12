@@ -1,4 +1,4 @@
-// ===== Faucet front-end controller (timer + progress) =====
+// ===== Faucet front-end controller (timer + progress + captcha reset) =====
 const TIMER_SECONDS = 10;        // waktu tunggu awal untuk enable claim
 const COOLDOWN_SECONDS = 10;     // cooldown setelah claim
 
@@ -15,7 +15,23 @@ const SUPABASE_URL  = 'https://jjhlpaonnnacucjcgmrc.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpqaGxwYW9ubm5hY3VjamNnbXJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUwMDIzODYsImV4cCI6MjA3MDU3ODM4Nn0.03N9XzY7HNYxHbVs1ac0elb27Tg8gPlMYycSFHTZHhk';
 
 let sec = TIMER_SECONDS;
-let mode = 'enable'; // 'enable' (menunggu sebelum bisa claim) atau 'cooldown'
+let mode = 'enable'; // 'enable' (siap klaim) atau 'cooldown'
+
+// --- helper: reset captcha token + widget ---
+function resetCaptchaLocal() {
+  try {
+    localStorage.removeItem('hcaptcha');
+    // kalau ada fungsi resetCaptcha di index.html, pakai itu
+    if (typeof window.resetCaptcha === 'function') {
+      window.resetCaptcha();
+      return;
+    }
+    // fallback: panggil langsung API hcaptcha
+    if (window.hcaptcha && typeof window.hcaptcha.reset === 'function') {
+      window.hcaptcha.reset();
+    }
+  } catch (e) { console.error(e); }
+}
 
 // --- render semua tampilan timer/progress ---
 function paint() {
@@ -36,7 +52,7 @@ function maybeEnable(){
   if (elClaim) elClaim.disabled = !ready;
 }
 
-// loop timer 1 detik
+// loop timer 1 detik untuk fase "enable"
 function startLoop() {
   paint(); maybeEnable();
   const tick = () => {
@@ -45,8 +61,7 @@ function startLoop() {
       paint(); maybeEnable();
       setTimeout(tick, 1000);
     } else {
-      // saat habis:
-      paint(); maybeEnable();
+      paint(); maybeEnable(); // ketika 0 detik, tombol bisa aktif jika captcha & address OK
     }
   };
   setTimeout(tick, 1000);
@@ -85,11 +100,15 @@ async function submitClaim(){
       return;
     }
 
-    // set "Next claim"
+    // tampilkan “Next claim”
     const now = new Date();
     now.setSeconds(now.getSeconds() + COOLDOWN_SECONDS);
     if (elNext) elNext.textContent = now.toLocaleTimeString();
     if (elMsg)  elMsg.textContent  = 'Success! Your claim is queued.';
+
+    // >>> reset captcha segera setelah klaim sukses
+    resetCaptchaLocal();
+    if (elClaim) elClaim.disabled = true;
 
     // masuk mode cooldown: hitung mundur 10 detik lalu balik lagi ke enable
     mode = 'cooldown';
@@ -105,7 +124,11 @@ async function submitClaim(){
         // selesai cooldown → mulai lagi fase enable
         mode = 'enable';
         sec  = TIMER_SECONDS;
+
+        // >>> reset captcha lagi saat masuk fase siap-claim
+        resetCaptchaLocal();
         paint(); maybeEnable();
+
         startLoop();
       }
     };
